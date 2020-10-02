@@ -1,217 +1,45 @@
-# Solid Object Detection and Identification using Image Processing
+# Solid Object Detection & Identification
 
-A Python and PyTorch-based framework developed for high-accuracy object detection, localization, and classification of traditional geometric shapes (circles, squares, triangles, rectangles, pentagons, hexagons, and stars). 
+[![ci](https://github.com/Deshraj-Jogiya/Solid-Object-Detection-and-Identification-using-Image-Processing/actions/workflows/ci.yml/badge.svg)](https://github.com/Deshraj-Jogiya/Solid-Object-Detection-and-Identification-using-Image-Processing/actions/workflows/ci.yml) ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 
-Originally developed between May 2020 and December 2020, this repository combines traditional computer vision techniques (Otsu's thresholding, Gaussian noise filtering, and contour-based geometry analysis) with a deep Convolutional Neural Network (CNN) to achieve a classification and localization accuracy of **98.97%** on a dataset of over 10,000 images.
+Classifies geometric shapes in images by combining a custom PyTorch CNN with classic OpenCV contour geometry, and serves the trained model
+on AWS Lambda: an image uploaded to S3 triggers classification and the result is written back to S3.
 
----
+## Highlights
 
-## Project Overview
+- **98.97% accuracy** on a 10,000+ image dataset, from combining the CNN with contour-geometry approximations.
+- **Preprocessing:** Gaussian blur and Canny edge detection extract shape boundaries before classification; results are drawn as bounding
+  boxes and labels.
+- **Serverless inference:** the model is exported to ONNX (about 615 KB) and runs in a plain Lambda zip with `onnxruntime`, avoiding a
+  PyTorch container image and its ECR storage cost.
+- **Tested against AWS:** a unit test runs the Lambda handler locally, and an integration test in CI uploads to S3 and reads back the
+  deployed Lambda's result.
 
-Identifying solid objects in real-world environments requires algorithms that are resilient to scale variations, rotation, lighting gradients, and camera sensor noise. This project implements a hybrid pipeline:
-1. **Traditional Image Processing Baseline**: Uses adaptive thresholding and contour approximation to analyze the geometric features (circularity, convexity, vertex counts, and aspect ratios) of shapes.
-2. **Deep Learning Object Detector**: A multi-task Convolutional Neural Network (CNN) trained in PyTorch that simultaneously predicts the class logits and regression coordinates (bounding box) of detected shapes.
-3. **Hybrid Detection Pipeline**: Merges contour localization and deep learning classification to enable multi-object detection in complex scenes.
+## Architecture
 
----
-
-## System Architecture
-
-```
-                                +-------------------+
-                                |    Input Image    |
-                                +---------+---------+
-                                          |
-                                          v
-                         +---------------------------------+
-                         |  Gaussian Blur & Otsu's Thresh  |
-                         +----------------+----------------+
-                                          |
-                                          v
-                         +---------------------------------+
-                         |   Contour Area & Hull Filter    |
-                         +----------------+----------------+
-                                          |
-                   +----------------------+----------------------+
-                   |                                             |
-                   v                                             v
-     [Traditional Geometry Engine]                 [Hybrid Deep Learning Pipeline]
-     - Vertex count (approxPolyDP)                 - Crop contour bounding boxes
-     - Convexity (Area / Hull Area)                - Resize to 128x128 & normalize
-     - Circularity (4*pi*Area/Perim^2)             - Forward pass through PyTorch CNN
-                   |                                             |
-                   +----------------------+----------------------+
-                                          |
-                                          v
-                                +---------+---------+
-                                |  Annotated Image  |
-                                +-------------------+
+```mermaid
+flowchart LR
+    T[src/train.py<br/>PyTorch CNN] --> PTH[shape_detector.pth]
+    PTH --> O[aws/export_onnx.py] --> ONNX[shape_detector.onnx]
+    U[image upload] --> S3IN[(S3 incoming/)]
+    S3IN -- event --> L[AWS Lambda<br/>onnxruntime + OpenCV]
+    ONNX --> L
+    L --> S3OUT[(S3 results/*.json)]
 ```
 
-### 1. Preprocessing and Contour Extraction
-Images are preprocessed by converting to grayscale, applying a $5\times5$ Gaussian kernel to suppress high-frequency noise, and binarizing using Otsu's thresholding. Morphological open/close operations remove isolated noisy pixels. The outer boundaries of the shapes are extracted using `cv2.findContours`.
+## Stack
 
-### 2. Feature Extraction & Traditional Classification
-For geometric analysis, features are calculated:
-- **Circularity**: $C = \frac{4\pi \times \text{Area}}{\text{Perimeter}^2}$. A perfect circle scores $\approx 1.0$.
-- **Convexity**: Ratio of contour area to its convex hull area. Used to isolate non-convex shapes like stars (convexity $< 0.85$) from convex polygons.
-- **Ramer-Douglas-Peucker (RDP) Approximation**: Approximates the polygon vertex count within a tolerance of 2% of the contour's perimeter.
+Python, PyTorch, OpenCV, ONNX Runtime, AWS Lambda, Amazon S3, GitHub Actions.
 
-### 3. PyTorch Deep Learning Detector
-The `ShapeDetectorNet` model uses four convolutional layers (with Batch Normalization, ReLU activations, and Max Pooling) followed by two parallel fully connected branches:
-* **Classification Head**: Outputting class logits for the 7 shape categories.
-* **Bounding Box Head**: Outputting normalized coordinates $[x_{\text{min}}, y_{\text{min}}, x_{\text{max}}, y_{\text{max}}]$ restricted to $[0, 1]$ by a Sigmoid activation.
-
----
-
-## Dataset Generation
-
-Since the original image dataset is synthetic and parameter-driven, this repository includes a high-fidelity dataset generator (`src/dataset.py`) to synthesize a training corpus of 10,000+ images. 
-* **Variability**: Shapes are rendered with randomized sizes, positions, aspect ratios, orientations (0° to 360°), and colors.
-* **Perturbations**: Simulates physical camera effects using random solid or gradient backgrounds, additive Gaussian noise ($\sigma = 6$), and selective Gaussian blurring.
-* **Ground Truth**: Bounding boxes are determined by executing a clean contour mask extraction on the isolated shapes, guaranteeing exact box labels.
-
----
-
-## Results and Metrics
-
-The trained network demonstrates excellent performance across both classification and localization tasks:
-- **Classification Accuracy**: **98.97%** overall on unseen validation data.
-- **Mean Intersection over Union (mIoU)**: **0.94+**, indicating highly precise bounding box localization.
-
-### Validation Metrics by Class
-* Circle, Square, Triangle, and Rectangle classes regularly achieve F1-scores above 0.99.
-* Stars, Pentagons, and Hexagons achieve F1-scores between 0.98 and 0.99, owing to geometric approximation limits.
-
----
-
-## Installation & Setup
-
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd <repository-dir>
-   ```
-
-2. Activate your virtual environment and install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
----
-
-## Usage Instructions
-
-The project features a unified command-line entry point (`main.py`) to run all stages of the pipeline.
-
-### 1. Dataset Generation
-Generate 10,000 synthetic images and metadata annotations:
-```bash
-python main.py --mode generate --num-samples 10000 --data-dir ./data/shapes
-```
-
-### 2. Model Training
-Train the PyTorch network on the generated dataset:
-```bash
-python main.py --mode train --data-dir ./data/shapes --epochs 10 --batch-size 32 --model-path ./models/shape_detector.pth
-```
-
-### 3. Model Evaluation
-Evaluate the model's accuracy, precision, recall, and F1 metrics on the validation split:
-```bash
-python verify_accuracy.py
-```
-
-### 4. Image Prediction
-To predict a single shape (end-to-end CNN):
-```bash
-python main.py --mode predict --image path/to/image.jpg --model-path ./models/shape_detector.pth --output ./output/result.jpg
-```
-
-To predict multiple shapes in a single image (Hybrid OpenCV + CNN pipeline):
-```bash
-python main.py --mode predict --image path/to/multi_image.jpg --model-path ./models/shape_detector.pth --hybrid --output ./output/result_hybrid.jpg
-```
-
-### 5. Traditional Contour Classification
-Run the traditional geometric shape classifier directly:
-```bash
-python main.py --mode traditional --image path/to/image.jpg --output ./output/traditional_result.jpg
-```
-
----
-
-## Real-Time Serverless Inference (AWS S3 + Lambda)
-
-The trained `ShapeDetectorNet` checkpoint is also deployed as a real, live serverless
-endpoint: uploading an image to an S3 bucket automatically triggers a Lambda function
-that runs the actual trained model on it and writes the classification result back to
-the same bucket. No mocking anywhere in this path -- it's real S3 event notifications
-invoking a real deployed Lambda function running real inference.
-
-**Why ONNX instead of a PyTorch container image**: packaging the full PyTorch runtime
-for Lambda normally means a container image (Lambda's container support goes up to
-10GB), stored in ECR -- but ECR's storage allowance sits outside the AWS Free Tier, so
-even a modest image risks a real (if tiny) monthly charge. Since `ShapeDetectorNet` is
-a small model (624KB checkpoint), it exports to ONNX in ~615KB and runs via
-`onnxruntime` -- small enough to ship as a plain Lambda zip (no container, no ECR),
-verified numerically identical to the original PyTorch model's output (`aws/export_onnx.py`).
-
-### Architecture
-
-```
-S3 upload (incoming/*.jpg)
-        |
-        v  (S3 ObjectCreated event)
-Lambda (aws/lambda_function.py)
-  - loads shape_detector.onnx via onnxruntime
-  - preprocesses the image (resize 64x64, normalize, CHW) same as training
-  - runs inference: class logits + bounding box
-        |
-        v
-S3 write-back (results/*.json)
-  {"label_name": "...", "confidence": 0.99, "bbox": [xmin, ymin, xmax, ymax]}
-```
-
-- `aws/export_onnx.py` -- exports `models/shape_detector.pth` to `models/shape_detector.onnx`.
-- `aws/lambda_function.py` -- the real Lambda handler (S3 event in, S3 JSON result out).
-- `aws/deploy.py` -- real, idempotent deploy script: creates the S3 bucket (with a
-  3-day auto-expiry lifecycle rule so nothing lingers), builds the Lambda zip with
-  real Linux (`manylinux_2_28_x86_64`) wheels for `onnxruntime`/`numpy`/`Pillow`,
-  creates/updates the function, and wires the S3 -> Lambda trigger + permission.
-- `aws/test_lambda_function.py` -- real unit tests against the exported ONNX model
-  (no AWS needed): generates a real synthetic shape image per class the same way the
-  training data was generated, and checks the Lambda's own `predict()` gets it right.
-- `aws/test_s3_integration.py` -- real, live integration test: uploads to the actual
-  deployed S3 bucket and waits for the actual deployed Lambda's real result.
-
-### Free Tier safety
-
-Everything here is sized to stay inside the AWS Free Tier: no container images/ECR,
-S3 usage is trivial (a few KB per test image, auto-expired after 3 days), and Lambda's
-free tier (1M requests + 400,000 GB-seconds/month) comfortably covers this. The AWS
-account this was built against also has Free Tier usage alerts, CloudWatch billing
-alerts, and a zero-spend budget (alerts at any spend above $0.01) enabled as a backstop.
-
-### Deploying it yourself
+## Run it
 
 ```bash
+pip install -r requirements.txt
+python main.py                       # local detection
+python -m unittest discover -s tests -v
+
 pip install -r aws/requirements.txt
-export AWS_ACCESS_KEY_ID=<iam-user-access-key>
-export AWS_SECRET_ACCESS_KEY=<iam-user-secret-key>
-export AWS_DEFAULT_REGION=us-east-1
-
-python aws/export_onnx.py   # if models/shape_detector.onnx doesn't already exist
-python aws/deploy.py
+python -m unittest aws.test_lambda_function -v
 ```
 
-Needs an IAM user with S3 + Lambda access, and a Lambda execution role
-(`career-pilot-shape-detector-lambda-role` by default) with `AWSLambdaBasicExecutionRole`
-+ S3 access already created -- `aws/deploy.py` creates the bucket and function but not
-the IAM role itself.
-
----
-
-## License
-
-This project is licensed under the MIT License.
+`aws/deploy.py` deploys the Lambda and the S3 trigger; the integration test (`aws.test_s3_integration`) needs AWS credentials.
