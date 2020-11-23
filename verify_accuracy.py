@@ -7,6 +7,8 @@ from src.dataset import ShapeDataset, SHAPE_CLASSES, LABEL_TO_SHAPE
 from src.model import ShapeDetectorNet
 from src.train import compute_iou
 from src.hybrid import classify_with_check
+from src.inference import predict_multi_shape_hybrid
+from src.traditional import preprocess_image, find_shape_boundaries
 
 def evaluate_metrics(model, dataloader, device):
     """
@@ -95,6 +97,47 @@ def report_geometry_cross_check(model, dataset, subset, device):
           f"{agree_correct / max(agree, 1) * 100:.2f}% of those are correct.")
     return agree / total, agree_correct / max(agree, 1)
 
+def _largest_box(binary):
+    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return None
+    x, y, w, h = cv2.boundingRect(max(contours, key=cv2.contourArea))
+    return [x, y, x + w - 1, y + h - 1]
+
+def _box_iou(a, b):
+    if a is None:
+        return 0.0
+    ix = max(0, min(a[2], b[2]) - max(a[0], b[0]) + 1)
+    iy = max(0, min(a[3], b[3]) - max(a[1], b[1]) + 1)
+    inter = ix * iy
+    union = (a[2] - a[0] + 1) * (a[3] - a[1] + 1) + (b[2] - b[0] + 1) * (b[3] - b[1] + 1) - inter
+    return inter / union
+
+def report_localization(model, dataset, subset, device):
+    """
+    Compares how well the thresholded mask and the Canny boundaries locate each shape (box IoU against the
+    annotation), and the CNN's accuracy on the crops the multi-shape pipeline classifies.
+    """
+    ious = {"threshold": [], "canny": []}
+    crop_correct = 0
+    for idx in subset.indices:
+        item = dataset.annotations[idx]
+        path = os.path.join(dataset.images_dir, item['filename'])
+        image = cv2.imread(path)
+        truth = [int(v) for v in item['bbox']]
+        ious["threshold"].append(_box_iou(_largest_box(preprocess_image(image)), truth))
+        ious["canny"].append(_box_iou(_largest_box(find_shape_boundaries(image)), truth))
+        detections = predict_multi_shape_hybrid(model, path, device)
+        if detections:
+            largest = max(detections, key=lambda d: (d['bbox'][2] - d['bbox'][0]) * (d['bbox'][3] - d['bbox'][1]))
+            crop_correct += largest['label_name'] == item['label_name']
+    total = len(subset.indices)
+    for name, values in ious.items():
+        values = np.array(values)
+        print(f"Localization ({name:9s}) : mean box IoU {values.mean():.4f}; IoU >= 0.9 on {np.mean(values >= 0.9) * 100:.1f}% of images")
+    print(f"CNN accuracy on Canny-located crops : {crop_correct / total * 100:.2f}%")
+    return {name: float(np.mean(values)) for name, values in ious.items()}, crop_correct / total
+
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data_dir = "./data/shapes"
@@ -133,6 +176,7 @@ def main():
     if accuracy >= target_accuracy:
         print(f"SUCCESS: Model achieved {accuracy:.2f}% classification accuracy, meeting target of {target_accuracy}%.")
         report_geometry_cross_check(model, full_dataset, val_dataset, device)
+        report_localization(model, full_dataset, val_dataset, device)
     else:
         print(f"WARNING: Model achieved {accuracy:.2f}% classification accuracy, which is below the target of {target_accuracy}%.")
 

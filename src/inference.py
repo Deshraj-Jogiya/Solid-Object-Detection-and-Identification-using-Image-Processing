@@ -87,8 +87,8 @@ def predict_multi_shape_hybrid(model, image_path, device=None):
     
     # 1. Traditional Contour Localization
     # Preprocess image
-    from src.traditional import preprocess_image
-    binary = preprocess_image(orig_img)
+    from src.traditional import find_shape_boundaries
+    binary = find_shape_boundaries(orig_img)
     
     contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     

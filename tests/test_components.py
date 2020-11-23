@@ -4,7 +4,7 @@ import unittest
 import numpy as np
 import torch
 from src.dataset import generate_shape_image, generate_shape_dataset, ShapeDataset, SHAPE_CLASSES
-from src.traditional import preprocess_image, detect_shapes_traditional
+from src.traditional import preprocess_image, detect_shapes_traditional, find_shape_boundaries
 from src.model import ShapeDetectorNet
 
 class TestShapeDetectionComponents(unittest.TestCase):
@@ -90,6 +90,19 @@ class TestShapeDetectionComponents(unittest.TestCase):
         self.assertIn(result["label"], SHAPE_CLASSES)
         self.assertEqual(result["confirmed"], result["geometry_label"] == result["label"])
         self.assertTrue(0.0 <= result["confidence"] <= 1.0)
+
+    def test_canny_boundaries_locate_the_shape(self):
+        """Canny boundaries give a box that overlaps the generated shape's true box."""
+        import cv2
+        img, bbox = generate_shape_image('hexagon', img_size=64)
+        edges = find_shape_boundaries(img)
+        self.assertEqual(edges.shape, img.shape[:2])
+        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        x, y, w, h = cv2.boundingRect(max(contours, key=cv2.contourArea))
+        ix = max(0, min(x + w - 1, bbox[2]) - max(x, bbox[0]) + 1)
+        iy = max(0, min(y + h - 1, bbox[3]) - max(y, bbox[1]) + 1)
+        union = w * h + (bbox[2] - bbox[0] + 1) * (bbox[3] - bbox[1] + 1) - ix * iy
+        self.assertGreater(ix * iy / union, 0.7)
 
 if __name__ == "__main__":
     unittest.main()

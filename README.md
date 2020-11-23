@@ -2,15 +2,15 @@
 
 [![ci](https://github.com/Deshraj-Jogiya/Solid-Object-Detection-and-Identification-using-Image-Processing/actions/workflows/ci.yml/badge.svg)](https://github.com/Deshraj-Jogiya/Solid-Object-Detection-and-Identification-using-Image-Processing/actions/workflows/ci.yml) ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 
-Classifies geometric shapes in images by combining a custom PyTorch CNN with classic OpenCV contour geometry, and serves the trained model
+Classifies geometric shapes in images with a custom PyTorch CNN, cross-checked against classic OpenCV contour geometry, and serves the trained model
 on AWS Lambda: an image uploaded to S3 triggers classification and the result is written back to S3.
 
 ## Highlights
 
 - **99.2% accuracy** on the 2,000 held-out images of a 10,000-image generated set across 7 classes (target: 98.97%) from the CNN;
   contour geometry independently confirms the CNN on 66% of images, and those confirmed predictions are 99.9% correct; CI regenerates the set and fails if accuracy drops below the target.
-- **Preprocessing:** Gaussian blur and Canny edge detection extract shape boundaries before classification; results are drawn as bounding
-  boxes and labels.
+- **Preprocessing:** Gaussian blur and Canny edge detection locate each shape before the CNN classifies its crop (mean box IoU 0.93
+  against 0.82 for a thresholded mask); results are drawn as bounding boxes and labels.
 - **Serverless inference:** the model is exported to ONNX (about 615 KB) and runs in a plain Lambda zip with `onnxruntime`, avoiding a
   PyTorch container image and its ECR storage cost.
 - **Tested against AWS:** a unit test runs the Lambda handler locally, and an integration test in CI uploads to S3 and reads back the
