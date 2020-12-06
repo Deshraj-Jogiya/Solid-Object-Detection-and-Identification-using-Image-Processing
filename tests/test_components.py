@@ -104,5 +104,19 @@ class TestShapeDetectionComponents(unittest.TestCase):
         union = w * h + (bbox[2] - bbox[0] + 1) * (bbox[3] - bbox[1] + 1) - ix * iy
         self.assertGreater(ix * iy / union, 0.7)
 
+    def test_draw_predictions_adds_the_outline_overlay(self):
+        """A detection with a contour gets its outline drawn, green when geometry agrees with the label."""
+        import cv2
+        from src.inference import OVERLAYS, draw_predictions
+        img = np.full((64, 64, 3), 255, dtype=np.uint8)
+        cv2.rectangle(img, (20, 20), (44, 44), (0, 0, 0), -1)
+        path = os.path.join(self.temp_dir, "square.png")
+        cv2.imwrite(path, img)
+        contour = np.array([[[20, 20]], [[44, 20]], [[44, 44]], [[20, 44]]], dtype=np.int32)
+        det = {"label_name": "square", "confidence": 0.9, "bbox": [18, 18, 46, 46], "contour": contour, "geometry_label": "square"}
+        out = draw_predictions(path, [det])
+        self.assertEqual(len(OVERLAYS), 4)
+        self.assertTrue(np.array_equal(out[44, 30], [0, 200, 0]))   # a point on the outline's bottom edge is green
+
 if __name__ == "__main__":
     unittest.main()

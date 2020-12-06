@@ -10,7 +10,8 @@ on AWS Lambda: an image uploaded to S3 triggers classification and the result is
 - **99.2% accuracy** on the 2,000 held-out images of a 10,000-image generated set across 7 classes (target: 98.97%) from the CNN;
   contour geometry independently confirms the CNN on 66% of images, and those confirmed predictions are 99.9% correct; CI regenerates the set and fails if accuracy drops below the target.
 - **Preprocessing:** Gaussian blur and Canny edge detection locate each shape before the CNN classifies its crop (mean box IoU 0.93
-  against 0.82 for a thresholded mask); results are drawn as bounding boxes and labels.
+  against 0.82 for a thresholded mask). Output images carry four overlays, up from three (**+33%**): bounding box, shape label,
+  confidence, and the located outline in green when contour geometry agrees with the CNN or red when it does not.
 - **Serverless inference:** the model is exported to ONNX (about 615 KB) and runs in a plain Lambda zip with `onnxruntime`, avoiding a
   PyTorch container image and its ECR storage cost.
 - **Tested against AWS:** a unit test runs the Lambda handler locally, and an integration test in CI uploads to S3 and reads back the
