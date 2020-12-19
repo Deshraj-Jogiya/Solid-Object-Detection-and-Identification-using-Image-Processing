@@ -17,6 +17,8 @@ on AWS Lambda: an image uploaded to S3 triggers classification and the result is
 - **Tested against AWS:** a unit test runs the Lambda handler locally, and an integration test in CI uploads to S3 and reads back the
   deployed Lambda's result.
 
+Measured results, each with the question, the test and the decision: [docs/FINDINGS.md](docs/FINDINGS.md).
+
 ## Architecture
 
 ```mermaid
