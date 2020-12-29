@@ -146,7 +146,7 @@ def main(out_dir=None) -> None:
         held = []
         for s in lab["samples"]:
             rgb = cv2.cvtColor(cv2.imread(os.path.join(out_dir, s["file"])), cv2.COLOR_BGR2RGB)
-            held.append({"file": s["file"], **geometry(rgb)})
+            held.append({"file": s["file"], "geometry": geometry(rgb)})
         extra = []
         for k in UNSEEN:
             for i in range(2):
@@ -155,7 +155,7 @@ def main(out_dir=None) -> None:
                 cv2.imwrite(os.path.join(out_dir, fname), cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
                 p = cnn(session, name, rgb)
                 extra.append({"file": fname, "label": k, "probs": [round(float(v), 6) for v in p],
-                              "predicted": SHAPE_CLASSES[int(p.argmax())], **geometry(rgb)})
+                              "predicted": SHAPE_CLASSES[int(p.argmax())], "geometry": geometry(rgb)})
         with open(os.path.join(out_dir, "geometry.json"), "w") as f:
             json.dump({"note": "src/traditional.py threshold path: preprocess_image, largest external contour, "
                                "classify_shape_by_geometry. Written by ood_check.py.",
