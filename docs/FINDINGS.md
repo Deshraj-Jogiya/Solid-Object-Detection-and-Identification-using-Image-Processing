@@ -58,3 +58,36 @@ red when it does not, so a reviewer can see which predictions a second, independ
 **Source.** Output of `verify_accuracy.py` ("Geometry cross-check").
 
 **Skills shown.** OpenCV contour analysis, PyTorch, image annotation.
+
+## What does it do with a shape it was never trained on?
+
+**How it was tested.** The CNN has no "none of these" answer: it always names one of its 7 classes. `ood_check.py` drew 1,200
+images of six shapes outside those classes (octagon, the stop-sign shape; heptagon; ellipse; plus sign; arrow; crescent; 200
+each, seed 7) with the same backgrounds, colours and noise as the training images, and compared the CNN's confidence there with
+its confidence on the 2,000 held-out images. It also scored one rule for flagging an unfamiliar input: trust the answer only
+when the CNN is at least 90% sure and the contour geometry (threshold path) names the same shape.
+
+| Images | CNN at least 90% sure | Trusted by the rule |
+|---|---|---|
+| Held-out (known shapes) | 96.3% | 64.3% (all of them correct) |
+| Unseen shapes, all six | 72.8% | 22.0% |
+
+| Unseen shape | CNN's most common answer | CNN at least 90% sure | Trusted by the rule |
+|---|---|---|---|
+| Octagon | hexagon (51%) | 55.5% | 29.5% |
+| Heptagon | hexagon (98%) | 88.0% | 0.5% |
+| Ellipse | hexagon (43%) | 73.5% | 3.0% |
+| Plus sign | star (73%) | 75.0% | 60.5% |
+| Arrow | star (50%) | 57.0% | 38.0% |
+| Crescent | hexagon (67%) | 88.0% | 0.5% |
+
+Every held-out image's thresholded mask has exactly one piece, so a mask with several pieces (a photo, a sign with lettering)
+is itself outside what the model was tested on.
+
+**Conclusion.** High confidence does not mean the shape is one the model knows: it is at least 90% sure on almost three in four
+unseen shapes. The geometry cross-check cuts that to about one in five, at the cost of trusting only 64.3% of the known shapes.
+Plus signs and arrows still get through, because both methods read a non-convex outline as a star.
+
+**Source.** Output of `ood_check.py`.
+
+**Skills shown.** Out-of-distribution testing, OpenCV contour geometry, ONNX Runtime.
