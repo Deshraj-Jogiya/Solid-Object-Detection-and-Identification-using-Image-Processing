@@ -86,7 +86,9 @@ is itself outside what the model was tested on.
 
 **Conclusion.** High confidence does not mean the shape is one the model knows: it is at least 90% sure on almost three in four
 unseen shapes. The geometry cross-check cuts that to about one in five, at the cost of trusting only 64.3% of the known shapes.
-Plus signs and arrows still get through, because both methods read a non-convex outline as a star.
+Plus signs and arrows still get through, because both methods read a non-convex outline as a star. A failed check is a
+warning, not a verdict: on the 678 held-out images where geometry disagreed, the CNN was still right 97.8% of the time, because
+the geometry rules often miss a corner at 64 x 64 pixels.
 
 **Source.** Output of `ood_check.py`.
 

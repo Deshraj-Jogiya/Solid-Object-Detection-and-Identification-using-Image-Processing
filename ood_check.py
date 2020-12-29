@@ -126,6 +126,8 @@ def main(out_dir=None) -> None:
     print(f"  CNN at least {CONFIDENT:.0%} sure: {np.mean(kc >= CONFIDENT):.1%}; median confidence {np.median(kc):.4f}")
     acc = [t == p for t, p, c, g in known if trusted(p, c, g)]
     print(f"  trusted by the rule: {np.mean([trusted(p, c, g) for _, p, c, g in known]):.1%}, correct when trusted: {np.mean(acc):.2%}")
+    split = [t == p for t, p, _, g in known if g != p]
+    print(f"  geometry disagrees on {len(split)}; the CNN is still right on {np.mean(split):.1%} of those")
     print(f"  separate pieces in the mask: at most {max(pieces)}, {np.mean(np.array(pieces) == 1):.1%} have exactly 1; "
           f"largest piece's area / white pixels: 1st percentile {np.percentile(share, 1):.3f}")
     print(f"Unseen shapes, {PER_UNSEEN} each")
