@@ -141,6 +141,77 @@ python main.py --mode traditional --image path/to/image.jpg --output ./output/tr
 
 ---
 
+## Real-Time Serverless Inference (AWS S3 + Lambda)
+
+The trained `ShapeDetectorNet` checkpoint is also deployed as a real, live serverless
+endpoint: uploading an image to an S3 bucket automatically triggers a Lambda function
+that runs the actual trained model on it and writes the classification result back to
+the same bucket. No mocking anywhere in this path -- it's real S3 event notifications
+invoking a real deployed Lambda function running real inference.
+
+**Why ONNX instead of a PyTorch container image**: packaging the full PyTorch runtime
+for Lambda normally means a container image (Lambda's container support goes up to
+10GB), stored in ECR -- but ECR's storage allowance sits outside the AWS Free Tier, so
+even a modest image risks a real (if tiny) monthly charge. Since `ShapeDetectorNet` is
+a small model (624KB checkpoint), it exports to ONNX in ~615KB and runs via
+`onnxruntime` -- small enough to ship as a plain Lambda zip (no container, no ECR),
+verified numerically identical to the original PyTorch model's output (`aws/export_onnx.py`).
+
+### Architecture
+
+```
+S3 upload (incoming/*.jpg)
+        |
+        v  (S3 ObjectCreated event)
+Lambda (aws/lambda_function.py)
+  - loads shape_detector.onnx via onnxruntime
+  - preprocesses the image (resize 64x64, normalize, CHW) same as training
+  - runs inference: class logits + bounding box
+        |
+        v
+S3 write-back (results/*.json)
+  {"label_name": "...", "confidence": 0.99, "bbox": [xmin, ymin, xmax, ymax]}
+```
+
+- `aws/export_onnx.py` -- exports `models/shape_detector.pth` to `models/shape_detector.onnx`.
+- `aws/lambda_function.py` -- the real Lambda handler (S3 event in, S3 JSON result out).
+- `aws/deploy.py` -- real, idempotent deploy script: creates the S3 bucket (with a
+  3-day auto-expiry lifecycle rule so nothing lingers), builds the Lambda zip with
+  real Linux (`manylinux_2_28_x86_64`) wheels for `onnxruntime`/`numpy`/`Pillow`,
+  creates/updates the function, and wires the S3 -> Lambda trigger + permission.
+- `aws/test_lambda_function.py` -- real unit tests against the exported ONNX model
+  (no AWS needed): generates a real synthetic shape image per class the same way the
+  training data was generated, and checks the Lambda's own `predict()` gets it right.
+- `aws/test_s3_integration.py` -- real, live integration test: uploads to the actual
+  deployed S3 bucket and waits for the actual deployed Lambda's real result.
+
+### Free Tier safety
+
+Everything here is sized to stay inside the AWS Free Tier: no container images/ECR,
+S3 usage is trivial (a few KB per test image, auto-expired after 3 days), and Lambda's
+free tier (1M requests + 400,000 GB-seconds/month) comfortably covers this. The AWS
+account this was built against also has Free Tier usage alerts, CloudWatch billing
+alerts, and a zero-spend budget (alerts at any spend above $0.01) enabled as a backstop.
+
+### Deploying it yourself
+
+```bash
+pip install -r aws/requirements.txt
+export AWS_ACCESS_KEY_ID=<iam-user-access-key>
+export AWS_SECRET_ACCESS_KEY=<iam-user-secret-key>
+export AWS_DEFAULT_REGION=us-east-1
+
+python aws/export_onnx.py   # if models/shape_detector.onnx doesn't already exist
+python aws/deploy.py
+```
+
+Needs an IAM user with S3 + Lambda access, and a Lambda execution role
+(`career-pilot-shape-detector-lambda-role` by default) with `AWSLambdaBasicExecutionRole`
++ S3 access already created -- `aws/deploy.py` creates the bucket and function but not
+the IAM role itself.
+
+---
+
 ## License
 
 This project is licensed under the MIT License.

@@ -40,9 +40,17 @@ env/
 data/
 models/
 !models/shape_detector.pth
+!models/shape_detector.onnx
 output/
 
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
+
+# AWS Lambda build artifacts
+aws/_package/
+aws/_deployment.zip
+
+# Local-only deploy credentials script -- NEVER commit this, it holds a real AWS secret key
+run_deploy.ps1
