@@ -3,3 +3,7 @@ onnxruntime
 numpy
 pillow
 opencv-python
+# torch is not used at inference time (that's the whole point of the ONNX
+# export), but the tests reuse src.dataset's real synthetic-image generator
+# for test fixtures, and that module imports torch as a side effect.
+torch
