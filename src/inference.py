@@ -87,7 +87,7 @@ def predict_multi_shape_hybrid(model, image_path, device=None):
     
     # 1. Traditional Contour Localization
     # Preprocess image
-    from src.traditional import find_shape_boundaries
+    from src.traditional import classify_shape_by_geometry, find_shape_boundaries
     binary = find_shape_boundaries(orig_img)
     
     contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -130,14 +130,21 @@ def predict_multi_shape_hybrid(model, image_path, device=None):
         detections.append({
             'label_name': shape_name,
             'confidence': confidence,
-            'bbox': [xmin, ymin, xmax, ymax]
+            'bbox': [xmin, ymin, xmax, ymax],
+            'contour': c,
+            'geometry_label': classify_shape_by_geometry(c)[0],
         })
         
     return detections
 
+# Overlays draw_predictions puts on an image (the outline was added to the original three)
+OVERLAYS = ("bounding box", "shape label", "confidence", "located outline coloured by geometry agreement")
+
+
 def draw_predictions(image_path, detections, output_path=None):
     """
-    Draws bounding boxes and labels with confidence scores on the image.
+    Draws the overlays in OVERLAYS on the image: a bounding box, the shape label and its confidence, and, for detections from
+    predict_multi_shape_hybrid, the located outline in green when contour geometry agrees with the CNN or red when it does not.
     """
     img = cv2.imread(image_path)
     if img is None:
@@ -153,6 +160,11 @@ def draw_predictions(image_path, detections, output_path=None):
         
         # Draw bounding box
         cv2.rectangle(img, (xmin, ymin), (xmax, ymax), color, 2)
+
+        # Located outline, coloured by whether contour geometry agrees with the CNN
+        if det.get('contour') is not None:
+            agrees = det.get('geometry_label') == label
+            cv2.drawContours(img, [det['contour']], -1, (0, 200, 0) if agrees else (0, 0, 230), 1)
         
         # Text label
         label_text = f"{label}"
