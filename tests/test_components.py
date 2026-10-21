@@ -76,5 +76,20 @@ class TestShapeDetectionComponents(unittest.TestCase):
         self.assertTrue(torch.all(bbox >= 0.0))
         self.assertTrue(torch.all(bbox <= 1.0))
 
+    def test_geometry_cross_check(self):
+        """The hybrid check returns the CNN label and flags agreement with contour geometry."""
+        from src.hybrid import classify_with_check, geometry_label
+        import cv2
+        img_rgb, _ = generate_shape_image('square', img_size=64)
+        img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+        self.assertIn(geometry_label(img_bgr), SHAPE_CLASSES + [None])
+        model = ShapeDetectorNet(num_classes=len(SHAPE_CLASSES))
+        model.eval()
+        tensor = torch.from_numpy(img_rgb).permute(2, 0, 1).float() / 255.0
+        result = classify_with_check(model, tensor, img_bgr)
+        self.assertIn(result["label"], SHAPE_CLASSES)
+        self.assertEqual(result["confirmed"], result["geometry_label"] == result["label"])
+        self.assertTrue(0.0 <= result["confidence"] <= 1.0)
+
 if __name__ == "__main__":
     unittest.main()
